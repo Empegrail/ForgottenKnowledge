@@ -1,6 +1,6 @@
 {
   "parent": "minecraft:item/generated",
   "textures": {
-    "layer0": "forgottenknowledge:item/knowledge_shard"
+    "layer0": "forgotten_knowledge:item/knowledge_shard"
   }
 }

@@ -1,34 +1,27 @@
 package empegrail.forgotten_knowledge;
 
 import net.minecraft.item.Item;
-import net.minecraft.item.ItemGroups;
-import net.minecraft.registry.Registries;
-import net.minecraft.registry.Registry;
+import net.minecraft.item.Items;
+import net.minecraft.registry.RegistryKey;
+import net.minecraft.registry.RegistryKeys;
 import net.minecraft.util.Identifier;
-import net.fabricmc.fabric.api.itemgroup.v1.ItemGroupEvents;
 
-public class ModItems {
-    // Declare the field but don’t assign yet
-    public static Item KNOWLEDGE_SHARD;
+import java.util.function.Function;
 
-    private static Item registerItem(String name, Item item) {
-        return Registry.register(
-                Registries.ITEM,
-                Identifier.of(ForgottenKnowledge.MOD_ID, name),
-                item
-        );
+public final class ModItems {
+    private ModItems() {
     }
 
-    public static void registerModItems() {
+    // Example item
+    public static final Item KNOWLEDGE_SHARD = register("knowledge_shard", Item::new, new Item.Settings());
+
+    private static Item register(String name, Function<Item.Settings, Item> factory, Item.Settings settings) {
+        RegistryKey<Item> key = RegistryKey.of(RegistryKeys.ITEM, Identifier.of(ForgottenKnowledge.MOD_ID, name));
+        return Items.register(key, factory, settings);
+    }
+
+    public static void initialize() {
         ForgottenKnowledge.LOGGER.info("Registering items for " + ForgottenKnowledge.MOD_ID);
-
-        // Initialize here (after Minecraft’s registries exist)
-        KNOWLEDGE_SHARD = registerItem("knowledge_shard",
-                new Item(new Item.Settings()));
-
-        // Add to a creative tab
-        ItemGroupEvents.modifyEntriesEvent(ItemGroups.INGREDIENTS).register(entries -> {
-            entries.add(KNOWLEDGE_SHARD);
-        });
     }
 }
+
