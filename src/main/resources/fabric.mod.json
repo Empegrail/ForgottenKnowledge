@@ -1,0 +1,41 @@
+{
+	"schemaVersion": 1,
+	"id": "forgotten_knowledge",
+	"version": "${version}",
+	"name": "Forgotten Knowledge",
+	"description": "Forgotten Knowledge aims to feel like it was part of minecraft all along",
+	"authors": [
+		"Empegrail"
+	],
+	"contact": {
+		"homepage": "https://fabricmc.net/",
+		"sources": "https://github.com/FabricMC/fabric-example-mod"
+	},
+	"license": "CC0-1.0",
+	"icon": "assets/forgotten_knowledge/icon.png",
+	"environment": "*",
+	"entrypoints": {
+		"main": [
+			"empegrail.forgotten_knowledge.ForgottenKnowledge"
+		],
+		"client": [
+			"empegrail.forgotten_knowledge.ForgottenKnowledgeClient"
+		]
+	},
+	"mixins": [
+		"forgotten_knowledge.mixins.json",
+		{
+			"config": "forgotten_knowledge.client.mixins.json",
+			"environment": "client"
+		}
+	],
+	"depends": {
+		"fabricloader": ">=0.17.2",
+		"minecraft": "~1.21.8",
+		"java": ">=21",
+		"fabric-api": "*"
+	},
+	"suggests": {
+		"another-mod": "*"
+	}
+}
