@@ -13,7 +13,7 @@ public final class ModItems {
     }
 
     // Example item
-    public static final Item KNOWLEDGE_SHARD = register("knowledge_shard", Item::new, new Item.Settings());
+    public static final Item SPELL_TOME = register("spell_tome", Item::new, new Item.Settings());
 
     private static Item register(String name, Function<Item.Settings, Item> factory, Item.Settings settings) {
         RegistryKey<Item> key = RegistryKey.of(RegistryKeys.ITEM, Identifier.of(ForgottenKnowledge.MOD_ID, name));
