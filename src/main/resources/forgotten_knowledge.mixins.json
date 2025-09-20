@@ -3,7 +3,7 @@
 	"package": "empegrail.forgotten_knowledge.mixin",
 	"compatibilityLevel": "JAVA_21",
 	"mixins": [
-		"ExampleMixin"
+        "AnvilScreenHandlerMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

@@ -10,6 +10,9 @@ public class ForgottenKnowledge implements ModInitializer {
 
     @Override
     public void onInitialize() {
+        // register items and anything else that depends on registries being ready
         ModItems.initialize();
     }
 }
+
+

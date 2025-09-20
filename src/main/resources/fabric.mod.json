@@ -24,10 +24,7 @@
 	},
 	"mixins": [
 		"forgotten_knowledge.mixins.json",
-		{
-			"config": "forgotten_knowledge.client.mixins.json",
-			"environment": "client"
-		}
+		"forgotten_knowledge.client.mixins.json"
 	],
 	"depends": {
 		"fabricloader": ">=0.17.2",
