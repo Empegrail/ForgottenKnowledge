@@ -1,6 +1,8 @@
 {
   "item.forgotten_knowledge.spell_tome": "Spell Tome",
-  "item.forgotten_knowledge.lightning_tome": "Spell Tome",
-  "item.forgotten_knowledge.explosion_tome": "Spell Tome"
+  "item.forgotten_knowledge.lightning_tome": "Lightning",
+  "item.forgotten_knowledge.explosion_tome": "Explosion",
+  "item.forgotten_knowledge.vanishment_tome": "Vanishment",
+  "item.forgotten_knowledge.cutting_tome": "Cut"
 }
 

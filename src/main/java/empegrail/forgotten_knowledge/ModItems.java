@@ -20,6 +20,8 @@ public final class ModItems {
     public static Item SPELL_TOME;
     public static Item LIGHTNING_TOME;
     public static Item EXPLOSION_TOME;
+    public static Item VANISHMENT_TOME;
+    public static Item CUTTING_TOME;
     // add more Item fields here as you create them
 
     // --- Generic register helper that uses Items.register(factory) so the registry key is set
@@ -48,6 +50,10 @@ public final class ModItems {
         LIGHTNING_TOME = registerTome("lightning_tome", SpellEffects.LIGHTNING_STRIKE, 2);
 
         EXPLOSION_TOME = registerTome("explosion_tome", SpellEffects.EXPLOSION, 2);
+
+        VANISHMENT_TOME = registerTome("vanishment_tome", SpellEffects.VANISH_OBJECT, 2);
+
+        CUTTING_TOME = registerTome("cutting_tome", SpellEffects.SWORD_SLASH, 2);
 
         // register additional tomes similarly
     }

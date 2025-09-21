@@ -44,6 +44,23 @@ public final class ModSpellRegistry {
                 5
         ));
 
+        // Example: Curse Of Vanishing + Curse Of Vanishing -> Vanishment Tome (xp cost 5).
+        // (Curse Of Vanishing is single-level, so we use level 1)
+        RECIPES.add(new SpellRecipe(
+                Enchantments.VANISHING_CURSE, 1,
+                Enchantments.VANISHING_CURSE, 1,
+                ModItems.VANISHMENT_TOME,
+                5
+        ));
+
+        // This requires the books be level 4.
+        RECIPES.add(new SpellRecipe(
+                Enchantments.SHARPNESS, 5,
+                Enchantments.SHARPNESS, 5,
+                ModItems.CUTTING_TOME,
+                5
+        ));
+
         // Add more recipes below in the same format.
     }
 
