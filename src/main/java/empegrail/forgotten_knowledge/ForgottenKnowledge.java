@@ -12,6 +12,7 @@ public class ForgottenKnowledge implements ModInitializer {
     public void onInitialize() {
         // register items and anything else that depends on registries being ready
         ModItems.initialize();
+        empegrail.forgotten_knowledge.spell.ModSpellRegistry.register(); // register recipes
     }
 }
 
