@@ -19,6 +19,7 @@ public final class ModItems {
     // --- Declared items (initialized in initialize()) ---
     public static Item SPELL_TOME;
     public static Item LIGHTNING_TOME;
+    public static Item EXPLOSION_TOME;
     // add more Item fields here as you create them
 
     // --- Generic register helper that uses Items.register(factory) so the registry key is set
@@ -45,6 +46,8 @@ public final class ModItems {
 
         // example spell tome bound to a SpellEffect
         LIGHTNING_TOME = registerTome("lightning_tome", SpellEffects.LIGHTNING_STRIKE, 2);
+
+        EXPLOSION_TOME = registerTome("explosion_tome", SpellEffects.EXPLOSION, 2);
 
         // register additional tomes similarly
     }
