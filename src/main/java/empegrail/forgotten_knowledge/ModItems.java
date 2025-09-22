@@ -32,9 +32,9 @@ public final class ModItems {
     }
 
     // small helper to create SpellTomeItem instances
-    private static Item registerTome(String name, SpellEffect effect, int xpCost) {
-        Item.Settings settings = new Item.Settings().maxCount(1); // don't set group here; add to groups with ItemGroupEvents if needed
-        return register(name, s -> new SpellTomeItem(s, effect, xpCost), settings);
+    private static Item registerTome(String name, SpellEffect effect, int baseXpCost) {
+        Item.Settings settings = new Item.Settings().maxCount(1);
+        return register(name, s -> new SpellTomeItem(s, effect, baseXpCost), settings);
     }
 
     /**
@@ -48,11 +48,8 @@ public final class ModItems {
 
         // example spell tome bound to a SpellEffect
         LIGHTNING_TOME = registerTome("lightning_tome", SpellEffects.LIGHTNING_STRIKE, 2);
-
         EXPLOSION_TOME = registerTome("explosion_tome", SpellEffects.EXPLOSION, 2);
-
         VANISHMENT_TOME = registerTome("vanishment_tome", SpellEffects.VANISH_OBJECT, 2);
-
         CUTTING_TOME = registerTome("cutting_tome", SpellEffects.SWORD_SLASH, 2);
 
         // register additional tomes similarly

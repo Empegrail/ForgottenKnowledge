@@ -10,6 +10,9 @@ public class ForgottenKnowledge implements ModInitializer {
 
     @Override
     public void onInitialize() {
+        // Register data components first
+        ModDataComponents.registerDataComponents();
+
         // register items and anything else that depends on registries being ready
         ModItems.initialize();
         empegrail.forgotten_knowledge.spell.ModSpellRegistry.register(); // register recipes

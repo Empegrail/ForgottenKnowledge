@@ -1,5 +1,7 @@
 package empegrail.forgotten_knowledge.mixin;
 
+import empegrail.forgotten_knowledge.ModDataComponents;
+import empegrail.forgotten_knowledge.SpellTomeItem;
 import empegrail.forgotten_knowledge.spell.ModSpellRegistry;
 import empegrail.forgotten_knowledge.spell.SpellRecipe;
 import it.unimi.dsi.fastutil.objects.Object2IntMap;
@@ -23,19 +25,11 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import java.util.Optional;
 
 /**
- * Mixin that replaces anvil result when two enchanted books match a recipe in ModSpellRegistry.
- *
- * Behavior:
- *  - Only checks enchanted books (Items.ENCHANTED_BOOK).
- *  - Reads stored enchantments (STORED_ENCHANTMENTS component) from each book.
- *  - For each recipe: checks both orders (left/right and swapped).
- *  - If a recipe matches (type + required level), writes the recipe result item to the result slot
- *    and sets the anvil's XP cost to the configured value.
+ * Mixin that handles both spell recipe creation and spell tome level upgrading.
  */
 @Mixin(AnvilScreenHandler.class)
 public abstract class AnvilScreenHandlerMixin {
 
-    // Shadow the anvil's levelCost property so we can set the XP cost in the GUI
     @Shadow @Final private Property levelCost;
 
     @Inject(method = "updateResult", at = @At("RETURN"))
@@ -46,7 +40,16 @@ public abstract class AnvilScreenHandlerMixin {
         ItemStack left = self.getSlot(0).getStack();
         ItemStack right = self.getSlot(1).getStack();
 
-        // Only operate on enchanted books
+        // First, check if we're combining two spell tomes of the same type
+        if (left.getItem() instanceof SpellTomeItem && right.getItem() instanceof SpellTomeItem) {
+            if (left.getItem() == right.getItem()) {
+                // Both are the same type of spell tome - try to upgrade
+                handleSpellTomeUpgrade(self, left, right);
+                return;
+            }
+        }
+
+        // If not upgrading spell tomes, check for enchanted book recipes
         if (!left.isOf(Items.ENCHANTED_BOOK) || !right.isOf(Items.ENCHANTED_BOOK)) {
             return;
         }
@@ -61,14 +64,14 @@ public abstract class AnvilScreenHandlerMixin {
             RegistryKey<Enchantment> rightKey = recipe.rightEnchantment;
 
             // Check both orders:
-            //   (left input matches recipe.left && right input matches recipe.right)
-            // OR
-            //   (left input matches recipe.right && right input matches recipe.left)
             if ((hasEnchantment(leftComp, leftKey, recipe.leftLevel) && hasEnchantment(rightComp, rightKey, recipe.rightLevel))
                     || (hasEnchantment(leftComp, rightKey, recipe.rightLevel) && hasEnchantment(rightComp, leftKey, recipe.leftLevel))) {
 
                 // Put the recipe result into the anvil output slot (slot index 2)
-                self.getSlot(2).setStack(recipe.result.getDefaultStack());
+                ItemStack resultStack = recipe.result.getDefaultStack();
+                // Set initial level to 1 for newly created spell tomes
+                resultStack.set(ModDataComponents.SPELL_LEVEL, 1);
+                self.getSlot(2).setStack(resultStack);
 
                 // Set displayed XP cost
                 this.levelCost.set(recipe.xpCost);
@@ -80,10 +83,30 @@ public abstract class AnvilScreenHandlerMixin {
     }
 
     /**
+     * Handle upgrading spell tomes by combining two of the same type
+     */
+    @Unique
+    private void handleSpellTomeUpgrade(AnvilScreenHandler self, ItemStack left, ItemStack right) {
+        int leftLevel = left.getOrDefault(ModDataComponents.SPELL_LEVEL, 1);
+        int rightLevel = right.getOrDefault(ModDataComponents.SPELL_LEVEL, 1);
+
+        // Only allow upgrading if levels are the same (to prevent skipping levels)
+        if (leftLevel == rightLevel) {
+            ItemStack resultStack = left.copy();
+            int newLevel = leftLevel + 1;
+            resultStack.set(ModDataComponents.SPELL_LEVEL, newLevel);
+
+            // Calculate XP cost for upgrading (scales with new level)
+            int upgradeCost = 5 * newLevel; // Base cost of 5 per level
+
+            self.getSlot(2).setStack(resultStack);
+            this.levelCost.set(upgradeCost);
+        }
+    }
+
+    /**
      * Check whether an ItemEnchantmentsComponent contains the given enchantment registry key
      * at *at least* the required level.
-     *
-     * The component stores entries as RegistryEntry<Enchantment> + integer level (Object2IntMap).
      */
     @Unique
     private static boolean hasEnchantment(ItemEnchantmentsComponent comp, RegistryKey<Enchantment> key, int requiredLevel) {
@@ -91,7 +114,7 @@ public abstract class AnvilScreenHandlerMixin {
 
         for (Object2IntMap.Entry<RegistryEntry<Enchantment>> e : comp.getEnchantmentEntries()) {
             RegistryEntry<Enchantment> regEntry = e.getKey();
-            int level = e.getIntValue(); // stored integer level
+            int level = e.getIntValue();
 
             Optional<RegistryKey<Enchantment>> k = regEntry.getKey();
             if (k.isPresent() && k.get().equals(key) && level >= requiredLevel) {
