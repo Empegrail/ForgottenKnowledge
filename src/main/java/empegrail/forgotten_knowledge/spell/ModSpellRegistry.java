@@ -61,6 +61,30 @@ public final class ModSpellRegistry {
                 5
         ));
 
+        // This requires the books be level 4.
+        RECIPES.add(new SpellRecipe(
+                Enchantments.BINDING_CURSE, 1,
+                Enchantments.BINDING_CURSE, 1,
+                ModItems.BIND_TOME,
+                5
+        ));
+
+        // This requires the books be level 2.
+        RECIPES.add(new SpellRecipe(
+                Enchantments.FROST_WALKER, 2,
+                Enchantments.FROST_WALKER, 2,
+                ModItems.FROST_TOME,
+                5
+        ));
+
+        // This requires the books be level 2.
+        RECIPES.add(new SpellRecipe(
+                Enchantments.FEATHER_FALLING, 4,
+                Enchantments.FEATHER_FALLING, 4,
+                ModItems.FEATHER_TOME,
+                5
+        ));
+
         // Add more recipes below in the same format.
     }
 

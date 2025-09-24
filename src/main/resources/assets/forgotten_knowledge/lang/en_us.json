@@ -3,6 +3,9 @@
   "item.forgotten_knowledge.lightning_tome": "Lightning",
   "item.forgotten_knowledge.explosion_tome": "Explosion",
   "item.forgotten_knowledge.vanishment_tome": "Vanishment",
-  "item.forgotten_knowledge.cutting_tome": "Cut"
+  "item.forgotten_knowledge.cutting_tome": "Cut",
+  "item.forgotten_knowledge.bind_tome": "Bind",
+  "item.forgotten_knowledge.frost_tome": "Freeze",
+  "item.forgotten_knowledge.feather_tome": "Feather"
 }
 
