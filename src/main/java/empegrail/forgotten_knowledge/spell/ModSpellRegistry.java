@@ -85,6 +85,22 @@ public final class ModSpellRegistry {
                 5
         ));
 
+        // This requires the books be level 2.
+        RECIPES.add(new SpellRecipe(
+                Enchantments.SMITE, 5,
+                Enchantments.SMITE, 5,
+                ModItems.HOLY_TOME,
+                5
+        ));
+
+        // This requires the books be level 2.
+        RECIPES.add(new SpellRecipe(
+                Enchantments.BANE_OF_ARTHROPODS, 5,
+                Enchantments.BANE_OF_ARTHROPODS, 5,
+                ModItems.VERMIN_TOME,
+                5
+        ));
+
         // Add more recipes below in the same format.
     }
 

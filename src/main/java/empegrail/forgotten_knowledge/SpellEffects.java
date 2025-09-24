@@ -338,6 +338,570 @@ public final class SpellEffects {
         return true;
     };
 
+    // Turn Undead / Smite Effect
+    // HOLY_NOVA Effect - Damages undead mobs with holy light
+    public static final SpellEffect HOLY_NOVA = (world, user, hand, stack, hit) -> {
+        if (world.isClient) return false;
+
+        int level = getSpellLevel(stack);
+
+        // Scaling system for radius and damage
+        int radius;
+        float damage;
+        switch (level) {
+            case 1:
+                radius = 6;
+                damage = 6.0f; // 3 hearts
+                break;
+            case 2:
+                radius = 9;
+                damage = 10.0f; // 5 hearts
+                break;
+            case 3:
+                radius = 12;
+                damage = 14.0f; // 7 hearts
+                break;
+            case 4:
+                radius = 15;
+                damage = 20.0f; // 10 hearts (one-shot basic undead)
+                break;
+            default:
+                // Continue scaling beyond level 4
+                radius = 15 + (level - 4) * 5;
+                damage = 20.0f + (level - 4) * 5.0f;
+        }
+
+        if (world instanceof ServerWorld serverWorld) {
+            // Phase 1: Charging effect (1 second buildup)
+            spawnChargingEffect(serverWorld, user, radius);
+
+            // Play charging sound (bell building up)
+            world.playSound(null, user.getBlockPos(),
+                    SoundEvents.BLOCK_BELL_USE,
+                    SoundCategory.PLAYERS,
+                    0.5f, 0.8f);
+
+            // Schedule the nova burst after 1 second (20 ticks)
+            serverWorld.getServer().execute(() -> {
+                try {
+                    Thread.sleep(1000); // 1 second delay
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
+
+                // Phase 2: Nova burst
+                executeNovaBurst(serverWorld, user, radius, damage, level);
+            });
+
+            return true;
+        }
+
+        return false;
+    };
+
+    // Helper method for the charging phase
+    private static void spawnChargingEffect(ServerWorld world, PlayerEntity user, int radius) {
+        int particleCount = 30;
+
+        for (int i = 0; i < particleCount; i++) {
+            double angle = (2 * Math.PI * i) / particleCount;
+            double distance = world.random.nextDouble() * radius;
+            double x = user.getX() + Math.cos(angle) * distance;
+            double z = user.getZ() + Math.sin(angle) * distance;
+            double y = user.getY() + 1.0 + world.random.nextDouble() * 2.0;
+
+            // Golden particles slowly rising
+            world.spawnParticles(
+                    ParticleTypes.ELECTRIC_SPARK, // Golden sparkle effect
+                    x, y, z,
+                    1, // count
+                    0.1, 0.1, 0.1, // spread
+                    0.05 // slow upward motion
+            );
+        }
+    }
+
+    // Helper method for the nova burst phase
+    private static void executeNovaBurst(ServerWorld world, PlayerEntity user, int radius, float damage, int level) {
+        // Play burst sound
+        world.playSound(null, user.getBlockPos(),
+                SoundEvents.BLOCK_BELL_RESONATE,
+                SoundCategory.PLAYERS,
+                1.0f, 1.0f);
+
+        world.playSound(null, user.getBlockPos(),
+                SoundEvents.ENTITY_LIGHTNING_BOLT_IMPACT,
+                SoundCategory.PLAYERS,
+                0.7f, 1.2f);
+
+        // Burst of golden light particles
+        spawnNovaBurstParticles(world, user, radius);
+
+        // Shockwave particles
+        spawnShockwaveParticles(world, user, radius);
+
+        // Damage undead mobs in the area
+        Box novaArea = new Box(
+                user.getX() - radius, user.getY() - 2, user.getZ() - radius,
+                user.getX() + radius, user.getY() + 3, user.getZ() + radius
+        );
+
+        List<LivingEntity> entities = world.getNonSpectatingEntities(LivingEntity.class, novaArea);
+        boolean affectedAny = false;
+
+        for (LivingEntity entity : entities) {
+            // Skip the player and non-undead mobs
+            if (entity == user || !isUndead(entity)) continue;
+
+            // Calculate distance-based damage falloff (optional)
+            double distance = entity.getPos().distanceTo(user.getPos());
+            float finalDamage = damage;
+            if (distance > radius * 0.5) {
+                // Reduce damage for entities at the edge
+                finalDamage *= 0.7f;
+            }
+
+            // Create holy damage source (bypasses some undead resistances)
+            DamageSource holyDamage = world.getDamageSources().indirectMagic(user, user);
+
+            // Apply damage
+            if (entity.damage(world, holyDamage, finalDamage)) {
+                affectedAny = true;
+
+                // Apply knockback
+                Vec3d knockbackDir = entity.getPos().subtract(user.getPos()).normalize();
+                double knockbackStrength = 1.0 + (level * 0.3);
+                entity.addVelocity(
+                        knockbackDir.x * knockbackStrength,
+                        0.3 + (level * 0.1), // slight upward knockback
+                        knockbackDir.z * knockbackStrength
+                );
+                entity.velocityModified = true;
+
+                // Spawn holy particles on the undead entity
+                spawnHolyParticlesOnEntity(world, entity);
+            }
+        }
+
+        // Additional effect for high levels
+        if (level >= 3) {
+            // Heal the player slightly (2 hearts at level 3, scaling up)
+            float healAmount = Math.min(4.0f + (level - 3) * 2.0f, 20.0f);
+            user.heal(healAmount);
+
+            // Play healing sound
+            world.playSound(null, user.getBlockPos(),
+                    SoundEvents.ENTITY_EXPERIENCE_ORB_PICKUP,
+                    SoundCategory.PLAYERS,
+                    0.5f, 1.5f);
+        }
+    }
+
+    // Helper method to check if an entity is undead
+    private static boolean isUndead(LivingEntity entity) {
+        // Common undead mob types
+        return entity.getType() == EntityType.ZOMBIE ||
+                entity.getType() == EntityType.SKELETON ||
+                entity.getType() == EntityType.WITHER_SKELETON ||
+                entity.getType() == EntityType.ZOMBIFIED_PIGLIN ||
+                entity.getType() == EntityType.DROWNED ||
+                entity.getType() == EntityType.PHANTOM ||
+                entity.getType() == EntityType.WITHER ||
+                entity.getType() == EntityType.ZOMBIE_VILLAGER ||
+                entity.getType() == EntityType.HUSK ||
+                entity.getType() == EntityType.STRAY ||
+                entity.getType() == EntityType.ZOGLIN;
+    }
+
+    // Helper method for nova burst particles
+    private static void spawnNovaBurstParticles(ServerWorld world, PlayerEntity user, int radius) {
+        int burstParticles = 50;
+
+        for (int i = 0; i < burstParticles; i++) {
+            double angle = (2 * Math.PI * i) / burstParticles;
+            double x = user.getX() + Math.cos(angle) * radius;
+            double z = user.getZ() + Math.sin(angle) * radius;
+            double y = user.getY() + 1.0;
+
+            world.spawnParticles(
+                    ParticleTypes.ELECTRIC_SPARK,
+                    x, y, z,
+                    3, // count
+                    0.5, 1.0, 0.5, // spread
+                    0.1 // speed
+            );
+
+            // Additional glow effect
+            world.spawnParticles(
+                    ParticleTypes.GLOW,
+                    x, y + 0.5, z,
+                    2, // count
+                    0.3, 0.3, 0.3, // spread
+                    0.05 // speed
+            );
+        }
+    }
+
+    // Helper method for shockwave particles
+    private static void spawnShockwaveParticles(ServerWorld world, PlayerEntity user, int radius) {
+        // Create expanding rings of particles
+        for (int ring = 1; ring <= 3; ring++) {
+            int ringParticles = 20;
+            double ringRadius = radius * (ring / 3.0);
+
+            for (int i = 0; i < ringParticles; i++) {
+                double angle = (2 * Math.PI * i) / ringParticles;
+                double x = user.getX() + Math.cos(angle) * ringRadius;
+                double z = user.getZ() + Math.sin(angle) * ringRadius;
+                double y = user.getY() + 0.5;
+
+                world.spawnParticles(
+                        ParticleTypes.GLOW,
+                        x, y, z,
+                        1, // count
+                        0, 0.1, 0, // spread (mostly upward)
+                        0.2 // speed
+                );
+            }
+        }
+    }
+
+    // Helper method to spawn holy particles on damaged undead
+    private static void spawnHolyParticlesOnEntity(ServerWorld world, LivingEntity entity) {
+        int particleCount = 10;
+
+        for (int i = 0; i < particleCount; i++) {
+            world.spawnParticles(
+                    ParticleTypes.ELECTRIC_SPARK,
+                    entity.getX() + (world.random.nextDouble() - 0.5) * entity.getWidth(),
+                    entity.getY() + world.random.nextDouble() * entity.getHeight(),
+                    entity.getZ() + (world.random.nextDouble() - 0.5) * entity.getWidth(),
+                    1, // count
+                    0.1, 0.1, 0.1, // spread
+                    0.05 // speed
+            );
+        }
+    }
+
+    // VERMIN_BANE Effect - Eliminates arthropod mobs with pestilent energy
+    public static final SpellEffect VERMIN_BANE = (world, user, hand, stack, hit) -> {
+        if (world.isClient) return false;
+
+        int level = getSpellLevel(stack);
+
+        // Scaling system for radius and damage
+        int radius;
+        float damage;
+        switch (level) {
+            case 1:
+                radius = 6;
+                damage = 6.0f; // 3 hearts
+                break;
+            case 2:
+                radius = 9;
+                damage = 10.0f; // 5 hearts
+                break;
+            case 3:
+                radius = 12;
+                damage = 14.0f; // 7 hearts
+                break;
+            case 4:
+                radius = 15;
+                damage = 20.0f; // 10 hearts
+                break;
+            default:
+                // Continue scaling beyond level 4
+                radius = 15 + (level - 4) * 3;
+                damage = 20.0f + (level - 4) * 5.0f;
+        }
+
+        if (world instanceof ServerWorld serverWorld) {
+            // Phase 1: Charging effect (1 second buildup)
+            spawnVerminChargingEffect(serverWorld, user, radius);
+
+            // Play charging sound (buzzing/chittering building up)
+            world.playSound(null, user.getBlockPos(),
+                    SoundEvents.ENTITY_BEE_LOOP,
+                    SoundCategory.PLAYERS,
+                    0.3f, 0.5f); // Lower pitch for creepier sound
+
+            world.playSound(null, user.getBlockPos(),
+                    SoundEvents.ENTITY_SILVERFISH_AMBIENT,
+                    SoundCategory.PLAYERS,
+                    0.4f, 0.7f);
+
+            // Schedule the burst after 1 second (20 ticks)
+            serverWorld.getServer().execute(() -> {
+                try {
+                    Thread.sleep(1000); // 1 second delay
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
+
+                // Phase 2: Vermin bane burst
+                executeVerminBurst(serverWorld, user, radius, damage, level);
+            });
+
+            return true;
+        }
+
+        return false;
+    };
+
+    // Helper method for the charging phase
+    private static void spawnVerminChargingEffect(ServerWorld world, PlayerEntity user, int radius) {
+        int particleCount = 25;
+
+        for (int i = 0; i < particleCount; i++) {
+            double angle = (2 * Math.PI * i) / particleCount;
+            double distance = world.random.nextDouble() * radius;
+            double x = user.getX() + Math.cos(angle) * distance;
+            double z = user.getZ() + Math.sin(angle) * distance;
+            double y = user.getY() + 1.0 + world.random.nextDouble() * 2.0;
+
+            // Dark ash and smoke particles slowly rising
+            world.spawnParticles(
+                    ParticleTypes.ASH,
+                    x, y, z,
+                    2, // count
+                    0.1, 0.1, 0.1, // spread
+                    0.03 // slow upward motion
+            );
+
+            world.spawnParticles(
+                    ParticleTypes.SMOKE,
+                    x, y, z,
+                    1, // count
+                    0.15, 0.15, 0.15, // spread
+                    0.02 // slow upward motion
+            );
+        }
+    }
+
+    // Helper method for the vermin burst phase
+    private static void executeVerminBurst(ServerWorld world, PlayerEntity user, int radius, float damage, int level) {
+        // Play burst sounds
+        world.playSound(null, user.getBlockPos(),
+                SoundEvents.ENTITY_BEE_DEATH,
+                SoundCategory.PLAYERS,
+                0.8f, 0.6f);
+
+        world.playSound(null, user.getBlockPos(),
+                SoundEvents.ENTITY_SPIDER_DEATH,
+                SoundCategory.PLAYERS,
+                0.7f, 0.8f);
+
+        world.playSound(null, user.getBlockPos(),
+                SoundEvents.ENTITY_GENERIC_EXTINGUISH_FIRE, //was ENTITY_GENERIC_EXPLODE, but got error.
+                SoundCategory.PLAYERS,
+                0.5f, 1.5f);
+
+        // Burst of dark energy particles
+        spawnVerminBurstParticles(world, user, radius);
+
+        // Shockwave of black/gray particles
+        spawnVerminShockwave(world, user, radius);
+
+        // Damage arthropod mobs in the area
+        Box verminArea = new Box(
+                user.getX() - radius, user.getY() - 2, user.getZ() - radius,
+                user.getX() + radius, user.getY() + 3, user.getZ() + radius
+        );
+
+        List<LivingEntity> entities = world.getNonSpectatingEntities(LivingEntity.class, verminArea);
+        boolean affectedAny = false;
+
+        for (LivingEntity entity : entities) {
+            // Skip the player and non-arthropod mobs
+            if (entity == user || !isArthropod(entity)) continue;
+
+            // Check for instant kill conditions
+            boolean instantKill = shouldInstantKill(entity, level);
+
+            // Calculate final damage (instant kill does massive damage)
+            float finalDamage = instantKill ? 100.0f : damage;
+
+            // Create vermin bane damage source
+            DamageSource verminDamage = world.getDamageSources().indirectMagic(user, user);
+
+            // Make arthropod screech before applying damage
+            playArthropodScreech(world, entity);
+
+            // Apply damage
+            if (entity.damage(world, verminDamage, finalDamage)) {
+                affectedAny = true;
+
+                // Spawn death particles and effects
+                spawnArthropodDeathEffects(world, entity, level);
+
+                // Apply slight knockback
+                Vec3d knockbackDir = entity.getPos().subtract(user.getPos()).normalize();
+                entity.addVelocity(
+                        knockbackDir.x * 0.5,
+                        0.2,
+                        knockbackDir.z * 0.5
+                );
+                entity.velocityModified = true;
+            }
+        }
+
+        // Additional effect for high levels
+        if (level >= 3 && affectedAny) {
+            // Play a satisfying extermination sound
+            world.playSound(null, user.getBlockPos(),
+                    SoundEvents.ENTITY_PLAYER_LEVELUP,
+                    SoundCategory.PLAYERS,
+                    0.3f, 1.2f);
+        }
+    }
+
+    // Helper method to check if an entity is an arthropod
+    private static boolean isArthropod(LivingEntity entity) {
+        return entity.getType() == EntityType.SPIDER ||
+                entity.getType() == EntityType.CAVE_SPIDER ||
+                entity.getType() == EntityType.SILVERFISH ||
+                entity.getType() == EntityType.ENDERMITE ||
+                entity.getType() == EntityType.BEE;
+    }
+
+    // Helper method to determine instant kill conditions
+    private static boolean shouldInstantKill(LivingEntity entity, int level) {
+        if (level >= 4) {
+            // Level 4+ instantly kills spiders and cave spiders
+            return entity.getType() == EntityType.SPIDER ||
+                    entity.getType() == EntityType.CAVE_SPIDER;
+        }
+        if (level >= 3) {
+            // Level 3 instantly kills silverfish and endermites
+            return entity.getType() == EntityType.SILVERFISH ||
+                    entity.getType() == EntityType.ENDERMITE;
+        }
+        return false;
+    }
+
+    // Helper method to play arthropod screech sounds
+    private static void playArthropodScreech(World world, LivingEntity entity) {
+        if (entity.getType() == EntityType.SPIDER || entity.getType() == EntityType.CAVE_SPIDER) {
+            world.playSound(null, entity.getBlockPos(),
+                    SoundEvents.ENTITY_SPIDER_HURT,
+                    SoundCategory.HOSTILE,
+                    1.0f, 1.2f);
+        } else if (entity.getType() == EntityType.SILVERFISH) {
+            world.playSound(null, entity.getBlockPos(),
+                    SoundEvents.ENTITY_SILVERFISH_HURT,
+                    SoundCategory.HOSTILE,
+                    1.0f, 1.0f);
+        } else if (entity.getType() == EntityType.ENDERMITE) {
+            world.playSound(null, entity.getBlockPos(),
+                    SoundEvents.ENTITY_ENDERMITE_HURT,
+                    SoundCategory.HOSTILE,
+                    1.0f, 1.0f);
+        } else if (entity.getType() == EntityType.BEE) {
+            world.playSound(null, entity.getBlockPos(),
+                    SoundEvents.ENTITY_BEE_HURT,
+                    SoundCategory.HOSTILE,
+                    1.0f, 0.8f);
+        }
+    }
+
+    // Helper method for vermin burst particles
+    private static void spawnVerminBurstParticles(ServerWorld world, PlayerEntity user, int radius) {
+        int burstParticles = 40;
+
+        for (int i = 0; i < burstParticles; i++) {
+            double angle = (2 * Math.PI * i) / burstParticles;
+            double x = user.getX() + Math.cos(angle) * radius;
+            double z = user.getZ() + Math.sin(angle) * radius;
+            double y = user.getY() + 1.0;
+
+            // Black/gray particle burst
+            world.spawnParticles(
+                    ParticleTypes.SMOKE,
+                    x, y, z,
+                    2, // count
+                    0.3, 0.5, 0.3, // spread
+                    0.1 // speed
+            );
+
+            // Ash particles for the dark energy effect
+            world.spawnParticles(
+                    ParticleTypes.ASH,
+                    x, y, z,
+                    1, // count
+                    0.2, 0.3, 0.2, // spread
+                    0.08 // speed
+            );
+        }
+    }
+
+    // Helper method for vermin shockwave
+    private static void spawnVerminShockwave(ServerWorld world, PlayerEntity user, int radius) {
+        // Create expanding rings of dark particles
+        for (int ring = 1; ring <= 3; ring++) {
+            int ringParticles = 15;
+            double ringRadius = radius * (ring / 3.0);
+
+            for (int i = 0; i < ringParticles; i++) {
+                double angle = (2 * Math.PI * i) / ringParticles;
+                double x = user.getX() + Math.cos(angle) * ringRadius;
+                double z = user.getZ() + Math.sin(angle) * ringRadius;
+                double y = user.getY() + 0.5;
+
+                world.spawnParticles(
+                        ParticleTypes.SMOKE,
+                        x, y, z,
+                        2, // count
+                        0, 0.2, 0, // spread (mostly upward)
+                        0.15 // speed
+                );
+            }
+        }
+    }
+
+    // Helper method to spawn arthropod death effects
+    private static void spawnArthropodDeathEffects(ServerWorld world, LivingEntity entity, int level) {
+        int particleCount = 15 + (level * 5);
+
+        for (int i = 0; i < particleCount; i++) {
+            // Smoke and ash particles where the arthropod dies
+            world.spawnParticles(
+                    ParticleTypes.SMOKE,
+                    entity.getX() + (world.random.nextDouble() - 0.5) * entity.getWidth(),
+                    entity.getY() + world.random.nextDouble() * entity.getHeight(),
+                    entity.getZ() + (world.random.nextDouble() - 0.5) * entity.getWidth(),
+                    1, // count
+                    0.1, 0.1, 0.1, // spread
+                    0.05 // speed
+            );
+
+            world.spawnParticles(
+                    ParticleTypes.ASH,
+                    entity.getX() + (world.random.nextDouble() - 0.5) * entity.getWidth(),
+                    entity.getY() + world.random.nextDouble() * entity.getHeight(),
+                    entity.getZ() + (world.random.nextDouble() - 0.5) * entity.getWidth(),
+                    1, // count
+                    0.08, 0.08, 0.08, // spread
+                    0.03 // speed
+            );
+
+            // For high levels, add some soul particles for extra effect
+            if (level >= 3) {
+                world.spawnParticles(
+                        ParticleTypes.SOUL_FIRE_FLAME,
+                        entity.getX() + (world.random.nextDouble() - 0.5) * entity.getWidth(),
+                        entity.getY() + world.random.nextDouble() * entity.getHeight(),
+                        entity.getZ() + (world.random.nextDouble() - 0.5) * entity.getWidth(),
+                        1, // count
+                        0.05, 0.05, 0.05, // spread
+                        0.02 // speed
+                );
+            }
+        }
+    }
+
+
     // Bind Effect - immobilizes entities in a 9x9 square with enchantment visuals
     public static final SpellEffect BIND = (world, user, hand, stack, hit) -> {
         if (world.isClient) return false;

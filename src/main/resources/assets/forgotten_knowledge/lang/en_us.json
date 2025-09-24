@@ -6,6 +6,8 @@
   "item.forgotten_knowledge.cutting_tome": "Cut",
   "item.forgotten_knowledge.bind_tome": "Bind",
   "item.forgotten_knowledge.frost_tome": "Freeze",
-  "item.forgotten_knowledge.feather_tome": "Feather"
+  "item.forgotten_knowledge.feather_tome": "Feather",
+  "item.forgotten_knowledge.holy_tome": "Turn Undead",
+  "item.forgotten_knowledge.vermin_tome": "Vermin Bane"
 }
 
