@@ -7,8 +7,10 @@ import net.minecraft.entity.EntityType;
 import net.minecraft.entity.LightningEntity;
 import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.entity.effect.StatusEffects;
+import net.minecraft.entity.projectile.SmallFireballEntity;
 import net.minecraft.item.ItemStack;
 import net.minecraft.particle.ParticleTypes;
+import net.minecraft.registry.tag.BlockTags;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.sound.SoundCategory;
 import net.minecraft.sound.SoundEvents;
@@ -279,6 +281,325 @@ public final class SpellEffects {
     }
 
     // Weapon Enchantments (1/8) implemented:
+
+    // Create a Fire Wave Effect with level scaling
+    public static final SpellEffect FIRE_WAVE = (world, user, hand, stack, hit) -> {
+        if (world.isClient) return false;
+
+        int level = getSpellLevel(stack);
+        int maxRadius = 4 + (level - 1) * 2; // Level 1: 4, Level 2: 6, Level 3: 8, etc.
+
+        BlockPos playerPos = user.getBlockPos();
+        ServerWorld serverWorld = (ServerWorld) world;
+
+        // Create the expanding wave effect
+        for (int radius = 1; radius <= maxRadius; radius++) {
+            final int currentRadius = radius;
+
+            // Schedule each ring with a delay to create the wave effect
+            serverWorld.getServer().execute(() -> {
+                createFireRing(serverWorld, playerPos, currentRadius, user, level);
+            });
+
+            // Add delay between rings for wave effect (2 ticks per ring)
+            try {
+                Thread.sleep(40); // 40ms = 2 ticks
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+
+        // For level 3+, create a second wave after a delay
+        if (level >= 3) {
+            serverWorld.getServer().execute(() -> {
+                try {
+                    Thread.sleep(1000); // 1 second delay for second wave
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
+
+                for (int radius = 1; radius <= maxRadius; radius++) {
+                    final int currentRadius = radius;
+                    serverWorld.getServer().execute(() -> {
+                        createFireRing(serverWorld, playerPos, currentRadius, user, level);
+                    });
+
+                    try {
+                        Thread.sleep(40);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
+                }
+            });
+        }
+
+        return true;
+    };
+
+    // Helper method to create a ring of fire at specific radius
+    private static void createFireRing(ServerWorld world, BlockPos center, int radius, PlayerEntity player, int level) {
+        DamageSource damageSource = createPlayerAttackSource(world, player);
+
+        // Calculate all positions in the ring
+        for (int x = -radius; x <= radius; x++) {
+            for (int z = -radius; z <= radius; z++) {
+                // Only process blocks exactly at the current radius (circle pattern)
+                double distance = Math.sqrt(x*x + z*z);
+                if (Math.abs(distance - radius) > 0.5) continue;
+
+                BlockPos targetPos = center.add(x, 0, z);
+
+                // Check if block is flammable and ignite it
+                BlockState state = world.getBlockState(targetPos);
+                if (isFlammable(state)) {
+                    // Try to place fire on top of flammable blocks
+                    BlockPos firePos = targetPos.up();
+                    if (world.getBlockState(firePos).isAir()) {
+                        world.setBlockState(firePos, Blocks.FIRE.getDefaultState());
+                    }
+                }
+
+                // Set entities on fire
+                Box damageBox = new Box(
+                        targetPos.getX() - 0.5, targetPos.getY(), targetPos.getZ() - 0.5,
+                        targetPos.getX() + 1.5, targetPos.getY() + 2, targetPos.getZ() + 1.5
+                );
+
+                List<Entity> entities = world.getEntitiesByClass(Entity.class, damageBox,
+                        entity -> entity != player && entity.isAlive());
+
+                for (Entity entity : entities) {
+                    entity.setFireTicks(80); // 4 seconds (20 ticks/second)
+                    if (entity instanceof LivingEntity livingEntity) {
+                        livingEntity.damage(world, damageSource, 2.0f * level);
+                    }
+                }
+
+                // Spawn particles for visual effect
+                world.spawnParticles(ParticleTypes.FLAME,
+                        targetPos.getX() + 0.5, targetPos.getY() + 1, targetPos.getZ() + 0.5,
+                        3, 0.2, 0.5, 0.2, 0.05);
+
+                world.spawnParticles(ParticleTypes.SMOKE,
+                        targetPos.getX() + 0.5, targetPos.getY() + 1, targetPos.getZ() + 0.5,
+                        2, 0.3, 0.3, 0.3, 0.02);
+            }
+        }
+    }
+
+    // Helper method to check if a block is flammable
+    private static boolean isFlammable(BlockState state) {
+        return state.isIn(BlockTags.LEAVES) ||
+                state.isIn(BlockTags.LOGS) ||
+                state.isIn(BlockTags.PLANKS) ||
+                state.isOf(Blocks.GRASS_BLOCK) ||
+                state.isOf(Blocks.TALL_GRASS) ||
+                state.isOf(Blocks.FERN) ||
+                state.isOf(Blocks.DEAD_BUSH) ||
+                state.isOf(Blocks.VINE) ||
+                state.isIn(BlockTags.WOOL) ||
+                state.isIn(BlockTags.WOOL_CARPETS);
+    }
+
+    // FIRE_BOLT Effect - Simple custom projectile with flame trail
+    public static final SpellEffect FIRE_BOLT = (world, user, hand, stack, hit) -> {
+        if (world.isClient()) return false;
+
+        int level = getSpellLevel(stack);
+        int fireDuration = (3 + level) * 20; // In ticks
+        float damage = 4.0f + (level * 2.0f);
+        double speed = 2.0 + (level * 0.5);
+        double maxDistance = 50.0 + (level * 10.0);
+
+        if (world instanceof ServerWorld serverWorld) {
+            Vec3d startPos = user.getEyePos();
+            Vec3d direction = user.getRotationVec(1.0f).normalize();
+
+            // Create a simple projectile by raycasting with steps
+            for (double distance = 0; distance <= maxDistance; distance += 1.0) {
+                Vec3d currentPos = startPos.add(direction.multiply(distance));
+
+                // Spawn flame particles along the path
+                serverWorld.spawnParticles(
+                        ParticleTypes.FLAME,
+                        currentPos.x, currentPos.y, currentPos.z,
+                        2, // Fewer particles for performance
+                        0.1, 0.1, 0.1, // Small spread
+                        0.01 // Speed
+                );
+
+                // Check for entity collision at this point
+                Box collisionBox = new Box(currentPos, currentPos).expand(0.5);
+                List<LivingEntity> entities = world.getEntitiesByClass(
+                        LivingEntity.class,
+                        collisionBox,
+                        entity -> entity != user && entity.isAlive()
+                );
+
+                if (!entities.isEmpty()) {
+                    // Hit an entity!
+                    LivingEntity target = entities.get(0);
+
+                    // Apply damage and fire
+                    if (target.damage(serverWorld, user.getDamageSources().magic(), damage)) {
+                        target.setOnFireFor(fireDuration);
+
+                        // Small knockback
+                        Vec3d knockback = direction.multiply(0.3);
+                        target.addVelocity(knockback.x, 0.1, knockback.z);
+                    }
+
+                    // Impact effect
+                    serverWorld.spawnParticles(
+                            ParticleTypes.FLAME,
+                            currentPos.x, currentPos.y, currentPos.z,
+                            15 + (level * 5),
+                            0.5, 0.5, 0.5,
+                            0.1
+                    );
+
+                    // Sound
+                    world.playSound(
+                            null,
+                            BlockPos.ofFloored(currentPos),
+                            SoundEvents.ENTITY_BLAZE_HURT,
+                            SoundCategory.HOSTILE,
+                            0.8f, 1.0f
+                    );
+
+                    break; // Stop after hitting something
+                }
+
+                // Stop if we hit a block
+                if (!world.getBlockState(BlockPos.ofFloored(currentPos)).isAir()) {
+                    // Block impact effect
+                    serverWorld.spawnParticles(
+                            ParticleTypes.FLAME,
+                            currentPos.x, currentPos.y, currentPos.z,
+                            10 + (level * 3),
+                            0.3, 0.3, 0.3,
+                            0.05
+                    );
+                    break;
+                }
+
+                // Small delay between steps to make it feel like a projectile
+                try {
+                    Thread.sleep(5); // 5ms delay - makes it visible as moving
+                } catch (InterruptedException e) {
+                    break;
+                }
+            }
+
+            // Launch sound
+            world.playSound(
+                    null,
+                    user.getBlockPos(),
+                    SoundEvents.ENTITY_BLAZE_SHOOT,
+                    SoundCategory.PLAYERS,
+                    0.7f,
+                    1.2f + (level * 0.1f)
+            );
+
+            return true;
+        }
+
+        return false;
+    };
+
+    // IGNITE Effect - Silently curses targets with fire that scales with level
+    public static final SpellEffect IGNITE = (world, user, hand, stack, hit) -> {
+        if (world.isClient) return false;
+
+        int level = getSpellLevel(stack);
+        float scaleFactor = getScaleFactor(level);
+
+        double range = 20.0 * scaleFactor;
+
+        // Fire duration scales with level (in seconds, converted to ticks)
+        int baseFireDuration = 3; // 3 seconds at level 1
+        int fireDurationTicks = (int)(baseFireDuration * level * 20); // Convert to ticks
+
+        Vec3d lookVec = user.getRotationVec(1.0f);
+        Vec3d start = user.getEyePos();
+        Vec3d end = start.add(lookVec.multiply(range));
+
+        Box hitBox = new Box(start, end).expand(scaleFactor);
+        List<Entity> targets = world.getOtherEntities(user, hitBox);
+
+        // Find the closest valid target in front of the player
+        LivingEntity closest = null;
+        double closestDist = Double.MAX_VALUE;
+
+        for (Entity target : targets) {
+            if (target instanceof LivingEntity living && target != user) {
+                Vec3d toTarget = living.getPos().subtract(start).normalize();
+                if (lookVec.dotProduct(toTarget) > 0.3) {
+                    double dist = living.squaredDistanceTo(start);
+                    if (dist < closestDist) {
+                        closest = living;
+                        closestDist = dist;
+                    }
+                }
+            }
+        }
+
+        if (closest != null && world instanceof ServerWorld serverWorld) {
+            // Set the target on fire - this is the correct way in Minecraft 1.21.8
+            closest.setOnFireFor(fireDurationTicks);
+
+            // For additional fire damage at higher levels, we can apply instant fire damage
+            if (level >= 3) {
+                // Apply instant fire damage that scales with level
+                float fireDamage = 2.0f * (level - 2); // 2 damage at level 3, 4 at level 4, etc.
+                DamageSource fireDamageSource = world.getDamageSources().onFire();
+                closest.damage(serverWorld, fireDamageSource, fireDamage);
+            }
+
+            // Spawn fire particles around the target
+            serverWorld.spawnParticles(
+                    ParticleTypes.FLAME,
+                    closest.getX(),
+                    closest.getBodyY(0.5),
+                    closest.getZ(),
+                    level * 3, // More particles for higher levels
+                    0.5, 0.5, 0.5, // spread
+                    0.05 // speed
+            );
+
+            // Spawn smoke particles for a cursed fire effect
+            serverWorld.spawnParticles(
+                    ParticleTypes.SMOKE,
+                    closest.getX(),
+                    closest.getBodyY(0.5),
+                    closest.getZ(),
+                    level * 2, // More smoke for higher levels
+                    0.3, 0.3, 0.3, // spread
+                    0.02 // speed
+            );
+
+            // For high levels, add soul fire particles for a cursed look
+            if (level >= 4) {
+                serverWorld.spawnParticles(
+                        ParticleTypes.SOUL_FIRE_FLAME,
+                        closest.getX(),
+                        closest.getBodyY(0.5),
+                        closest.getZ(),
+                        level, // Soul fire particles
+                        0.2, 0.2, 0.2, // spread
+                        0.01 // speed
+                );
+            }
+
+            // Silent curse - no sound played (as requested)
+            return true;
+        }
+
+        return false;
+    };
 
     // Sword Slash Effect with level scaling - Sharpness
     public static final SpellEffect SWORD_SLASH = (world, user, hand, stack, hit) -> {

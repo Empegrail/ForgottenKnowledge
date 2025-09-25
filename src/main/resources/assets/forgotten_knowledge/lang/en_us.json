@@ -8,6 +8,9 @@
   "item.forgotten_knowledge.frost_tome": "Freeze",
   "item.forgotten_knowledge.feather_tome": "Feather",
   "item.forgotten_knowledge.holy_tome": "Turn Undead",
-  "item.forgotten_knowledge.vermin_tome": "Vermin Bane"
+  "item.forgotten_knowledge.vermin_tome": "Vermin Bane",
+  "item.forgotten_knowledge.ignite_tome": "Ignite",
+  "item.forgotten_knowledge.firebolt_tome": "Fire Bolt",
+  "item.forgotten_knowledge.firewave_tome": "Fire Storm"
 }
 

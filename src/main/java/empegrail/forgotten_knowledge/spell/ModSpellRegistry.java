@@ -101,6 +101,30 @@ public final class ModSpellRegistry {
                 5
         ));
 
+        // This requires the books be level 2.
+        RECIPES.add(new SpellRecipe(
+                Enchantments.FIRE_ASPECT, 2,
+                Enchantments.FIRE_ASPECT, 2,
+                ModItems.IGNITE_TOME,
+                5
+        ));
+
+        // This requires the books be level 2.
+        RECIPES.add(new SpellRecipe(
+                Enchantments.FLAME, 1,
+                Enchantments.FLAME, 1,
+                ModItems.FIREBOLT_TOME,
+                5
+        ));
+
+        // This requires the books be level 2.
+        RECIPES.add(new SpellRecipe(
+                Enchantments.FIRE_PROTECTION, 4,
+                Enchantments.FIRE_PROTECTION, 4,
+                ModItems.FIREWAVE_TOME,
+                5
+        ));
+
         // Add more recipes below in the same format.
     }
 
