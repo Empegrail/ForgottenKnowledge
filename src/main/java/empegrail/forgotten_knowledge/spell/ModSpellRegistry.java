@@ -125,6 +125,22 @@ public final class ModSpellRegistry {
                 5
         ));
 
+        // This requires the books be level 2.
+        RECIPES.add(new SpellRecipe(
+                Enchantments.IMPALING, 5,
+                Enchantments.IMPALING, 5,
+                ModItems.ICE_TOME,
+                5
+        ));
+
+        // This requires the books be level 2.
+        RECIPES.add(new SpellRecipe(
+                Enchantments.THORNS, 3,
+                Enchantments.THORNS, 3,
+                ModItems.RETRIBUTION_TOME,
+                5
+        ));
+
         // Add more recipes below in the same format.
     }
 

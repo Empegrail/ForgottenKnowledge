@@ -30,6 +30,8 @@ public final class ModItems {
     public static Item IGNITE_TOME;
     public static Item FIREBOLT_TOME;
     public static Item FIREWAVE_TOME;
+    public static Item ICE_TOME;
+    public static Item RETRIBUTION_TOME;
     // add more Item fields here as you create them
 
     // --- Generic register helper that uses Items.register(factory) so the registry key is set
@@ -67,6 +69,8 @@ public final class ModItems {
         IGNITE_TOME = registerTome("ignite_tome", SpellEffects.IGNITE, 2);
         FIREBOLT_TOME = registerTome("firebolt_tome", SpellEffects.FIRE_BOLT, 2);
         FIREWAVE_TOME = registerTome("firewave_tome", SpellEffects.FIRE_WAVE, 2);
+        ICE_TOME = registerTome("ice_tome", SpellEffects.ICE_SPEAR, 2);
+        RETRIBUTION_TOME = registerTome("retribution_tome", SpellEffects.RETRIBUTION, 2);
 
         // register additional tomes similarly
     }

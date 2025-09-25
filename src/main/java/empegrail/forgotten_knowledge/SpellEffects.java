@@ -20,6 +20,7 @@ import net.minecraft.util.Hand;
 import net.minecraft.util.hit.BlockHitResult;
 import net.minecraft.util.hit.HitResult;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Direction;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.World;
 import net.minecraft.entity.player.PlayerEntity;
@@ -28,7 +29,10 @@ import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.util.math.Box;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
 /**
  * Small collection of example SpellEffect implementations.
@@ -281,6 +285,318 @@ public final class SpellEffects {
     }
 
     // Weapon Enchantments (1/8) implemented:
+
+    // RETRIBUTION Effect - Punishes the next attacker with multiplied damage
+    public static final SpellEffect RETRIBUTION = (world, user, hand, stack, hit) -> {
+        if (world.isClient) return false;
+
+        int level = getSpellLevel(stack);
+
+        // Store the retribution data on the player using a custom data component
+        // We'll use a simple approach by storing it in a temporary field
+        if (world instanceof ServerWorld serverWorld) {
+            // Apply the retribution effect to the player
+            applyRetributionEffect(user, level);
+
+            // Play a subtle activation sound
+            world.playSound(null, user.getBlockPos(),
+                    SoundEvents.BLOCK_AMETHYST_BLOCK_RESONATE,
+                    SoundCategory.PLAYERS,
+                    0.5f, 0.8f + (level * 0.1f));
+
+            // Spawn subtle particles around the player
+            serverWorld.spawnParticles(
+                    ParticleTypes.ENCHANT,
+                    user.getX(),
+                    user.getY() + 1.0,
+                    user.getZ(),
+                    10 + (level * 2),
+                    0.5, 0.5, 0.5,
+                    0.02
+            );
+
+            return true;
+        }
+
+        return false;
+    };
+
+    // Helper method to apply retribution effect to the player
+    private static void applyRetributionEffect(PlayerEntity player, int level) {
+        // We'll use a custom data component to track retribution
+        // For now, we'll use a simple approach with a static map (in a real implementation, you'd want persistent storage)
+        RetributionManager.setRetribution(player, level);
+    }
+
+    // Custom manager class to handle retribution effects
+    public static class RetributionManager {
+        // Simple in-memory storage (would need persistence in a real implementation)
+        private static final Map<UUID, RetributionData> activeRetributions = new HashMap<>();
+
+        public static void setRetribution(PlayerEntity player, int level) {
+            activeRetributions.put(player.getUuid(), new RetributionData(level, player.getWorld().getTime()));
+        }
+
+        public static RetributionData getRetribution(PlayerEntity player) {
+            return activeRetributions.get(player.getUuid());
+        }
+
+        public static void removeRetribution(PlayerEntity player) {
+            activeRetributions.remove(player.getUuid());
+        }
+
+        // Call this when a player is attacked
+        public static boolean onPlayerAttacked(PlayerEntity player, LivingEntity attacker, float damageAmount) {
+            RetributionData data = getRetribution(player);
+            if (data != null) {
+                // Calculate retribution damage (damage dealt × level)
+                float retributionDamage = damageAmount * data.level;
+
+                // Apply the damage to the attacker
+                if (attacker.damage((ServerWorld) player.getWorld(), player.getDamageSources().magic(), retributionDamage)) {
+                    // Spawn thorns-like particles
+                    if (player.getWorld() instanceof ServerWorld serverWorld) {
+                        spawnRetributionParticles(serverWorld, attacker, data.level);
+                    }
+
+                    // Play thorns sound
+                    player.getWorld().playSound(null, attacker.getBlockPos(),
+                            SoundEvents.ENCHANT_THORNS_HIT,
+                            SoundCategory.PLAYERS,
+                            1.0f, 0.8f + (data.level * 0.1f));
+
+                    // Remove the retribution effect after it triggers
+                    removeRetribution(player);
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private static void spawnRetributionParticles(ServerWorld world, LivingEntity target, int level) {
+            int particleCount = 10 + (level * 5); // More particles for higher levels
+
+            for (int i = 0; i < particleCount; i++) {
+                world.spawnParticles(
+                        ParticleTypes.CRIT,
+                        target.getX() + (world.random.nextDouble() - 0.5) * target.getWidth(),
+                        target.getY() + world.random.nextDouble() * target.getHeight(),
+                        target.getZ() + (world.random.nextDouble() - 0.5) * target.getWidth(),
+                        1, // count
+                        0.1, 0.1, 0.1, // spread
+                        0.05 // speed
+                );
+
+                // Add magic particles for higher levels
+                if (level >= 3) {
+                    world.spawnParticles(
+                            ParticleTypes.ENCHANT,
+                            target.getX() + (world.random.nextDouble() - 0.5) * target.getWidth(),
+                            target.getY() + world.random.nextDouble() * target.getHeight(),
+                            target.getZ() + (world.random.nextDouble() - 0.5) * target.getWidth(),
+                            1, // count
+                            0.15, 0.15, 0.15, // spread
+                            0.03 // speed
+                    );
+                }
+            }
+        }
+    }
+
+    // Data class to store retribution information
+    public static class RetributionData {
+        public final int level;
+        public final long activationTime;
+
+        public RetributionData(int level, long activationTime) {
+            this.level = level;
+            this.activationTime = activationTime;
+        }
+    }
+
+    // Ice Effect - Shoots an ice projectile that damages and slows enemies
+    public static final SpellEffect ICE_SPEAR = (world, user, hand, stack, hit) -> {
+        if (world.isClient()) return false;
+
+        int level = getSpellLevel(stack);
+        int slownessDuration = (3 + level) * 20; // In ticks (3 seconds + 1s per level)
+        float damage = 4.0f + (level * 2.0f);
+        double speed = 2.0 + (level * 0.5);
+        double maxDistance = 50.0 + (level * 10.0);
+
+        if (world instanceof ServerWorld serverWorld) {
+            Vec3d startPos = user.getEyePos();
+            Vec3d direction = user.getRotationVec(1.0f).normalize();
+
+            // Create a simple projectile by raycasting with steps
+            for (double distance = 0; distance <= maxDistance; distance += 1.0) {
+                Vec3d currentPos = startPos.add(direction.multiply(distance));
+
+                // Spawn ice/snow particles along the path
+                serverWorld.spawnParticles(
+                        ParticleTypes.SNOWFLAKE,
+                        currentPos.x, currentPos.y, currentPos.z,
+                        2, // Fewer particles for performance
+                        0.1, 0.1, 0.1, // Small spread
+                        0.01 // Speed
+                );
+
+                // Add ice particles for higher levels
+                if (level >= 3) {
+                    serverWorld.spawnParticles(
+                            ParticleTypes.ITEM_SNOWBALL,
+                            currentPos.x, currentPos.y, currentPos.z,
+                            1,
+                            0.05, 0.05, 0.05,
+                            0.005
+                    );
+                }
+
+                // Check for entity collision at this point
+                Box collisionBox = new Box(currentPos, currentPos).expand(0.5);
+                List<LivingEntity> entities = world.getEntitiesByClass(
+                        LivingEntity.class,
+                        collisionBox,
+                        entity -> entity != user && entity.isAlive()
+                );
+
+                if (!entities.isEmpty()) {
+                    // Hit an entity!
+                    LivingEntity target = entities.get(0);
+
+                    // Apply damage and slowness (freeze effect)
+                    if (target.damage(serverWorld, user.getDamageSources().magic(), damage)) {
+                        // Apply slowness as our "freeze" effect
+                        target.addStatusEffect(new StatusEffectInstance(
+                                StatusEffects.SLOWNESS,
+                                slownessDuration,
+                                Math.min(level - 1, 3), // Higher levels = stronger slowness (up to Slowness IV)
+                                false, true
+                        ));
+
+                        // Apply mining fatigue to simulate freezing (reduces attack speed)
+                        if (level >= 2) {
+                            target.addStatusEffect(new StatusEffectInstance(
+                                    StatusEffects.MINING_FATIGUE,
+                                    slownessDuration,
+                                    Math.min(level - 2, 2), // Scales with level
+                                    false, true
+                            ));
+                        }
+
+                        // For very high levels, apply weakness too
+                        if (level >= 4) {
+                            target.addStatusEffect(new StatusEffectInstance(
+                                    StatusEffects.WEAKNESS,
+                                    slownessDuration / 2, // Shorter duration
+                                    Math.min(level - 4, 1),
+                                    false, true
+                            ));
+                        }
+
+                        // Small knockback (less than fire bolt for ice theme)
+                        Vec3d knockback = direction.multiply(0.2);
+                        target.addVelocity(knockback.x, 0.05, knockback.z);
+                        target.velocityModified = true;
+                    }
+
+                    // Impact effect - ice explosion
+                    serverWorld.spawnParticles(
+                            ParticleTypes.SNOWFLAKE,
+                            currentPos.x, currentPos.y, currentPos.z,
+                            15 + (level * 5),
+                            0.5, 0.5, 0.5,
+                            0.1
+                    );
+
+                    // Ice shard particles for impact
+                    serverWorld.spawnParticles(
+                            ParticleTypes.ITEM_SNOWBALL,
+                            currentPos.x, currentPos.y, currentPos.z,
+                            10 + (level * 3),
+                            0.3, 0.3, 0.3,
+                            0.05
+                    );
+
+                    // Sound - ice breaking
+                    world.playSound(
+                            null,
+                            BlockPos.ofFloored(currentPos),
+                            SoundEvents.BLOCK_GLASS_BREAK,
+                            SoundCategory.HOSTILE,
+                            0.8f, 1.2f + (level * 0.1f)
+                    );
+
+                    break; // Stop after hitting something
+                }
+
+                // Stop if we hit a block
+                BlockPos blockPos = BlockPos.ofFloored(currentPos);
+                if (!world.getBlockState(blockPos).isAir()) {
+                    // Block impact effect - create frost on the block
+                    serverWorld.spawnParticles(
+                            ParticleTypes.SNOWFLAKE,
+                            currentPos.x, currentPos.y, currentPos.z,
+                            10 + (level * 3),
+                            0.3, 0.3, 0.3,
+                            0.05
+                    );
+
+                    // Try to place frost/snow on the block if it's a solid surface
+                    Direction hitFace = getHitFace(direction);
+                    BlockPos surfacePos = blockPos.offset(hitFace);
+
+                    if (world.getBlockState(surfacePos).isAir()) {
+                        // Place snow or frost walker ice based on level
+                        if (level >= 3) {
+                            world.setBlockState(surfacePos, Blocks.FROSTED_ICE.getDefaultState());
+                        } else {
+                            world.setBlockState(surfacePos, Blocks.SNOW.getDefaultState());
+                        }
+                    }
+
+                    break;
+                }
+
+                // Small delay between steps to make it feel like a projectile
+                try {
+                    Thread.sleep(5); // 5ms delay - makes it visible as moving
+                } catch (InterruptedException e) {
+                    break;
+                }
+            }
+
+            // Launch sound - ice magic
+            world.playSound(
+                    null,
+                    user.getBlockPos(),
+                    SoundEvents.ENTITY_SNOWBALL_THROW,
+                    SoundCategory.PLAYERS,
+                    0.7f,
+                    0.8f + (level * 0.1f)
+            );
+
+            return true;
+        }
+
+        return false;
+    };
+
+    // Helper method to determine which face of the block was hit ice
+    private static Direction getHitFace(Vec3d direction) {
+        // Simple approximation - use the dominant direction component
+        double absX = Math.abs(direction.x);
+        double absY = Math.abs(direction.y);
+        double absZ = Math.abs(direction.z);
+
+        if (absX > absY && absX > absZ) {
+            return direction.x > 0 ? Direction.EAST : Direction.WEST;
+        } else if (absY > absX && absY > absZ) {
+            return direction.y > 0 ? Direction.UP : Direction.DOWN;
+        } else {
+            return direction.z > 0 ? Direction.SOUTH : Direction.NORTH;
+        }
+    }
 
     // Create a Fire Wave Effect with level scaling
     public static final SpellEffect FIRE_WAVE = (world, user, hand, stack, hit) -> {
