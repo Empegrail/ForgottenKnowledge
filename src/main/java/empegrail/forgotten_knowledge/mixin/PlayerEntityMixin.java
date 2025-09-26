@@ -12,13 +12,18 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 @Mixin(PlayerEntity.class)
 public class PlayerEntityMixin {
 
-    @Inject(method = "damage", at = @At("HEAD"))
+    @Inject(method = "damage", at = @At("HEAD"), cancellable = true)
     private void onDamage(ServerWorld world, DamageSource source, float amount, CallbackInfoReturnable<Boolean> cir) {
         PlayerEntity player = (PlayerEntity) (Object) this;
 
         // Check if the damage comes from a living entity and retribution is active
         if (source.getAttacker() instanceof net.minecraft.entity.LivingEntity attacker) {
-            SpellEffects.RetributionManager.onPlayerAttacked(player, attacker, amount);
+            boolean prevented = SpellEffects.RetributionManager.onPlayerAttacked(player, attacker, amount);
+            if (prevented) {
+                // Cancel the damage entirely - player takes zero damage
+                cir.setReturnValue(false);
+                cir.cancel();
+            }
         }
     }
 }

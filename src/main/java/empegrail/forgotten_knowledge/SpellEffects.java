@@ -354,6 +354,11 @@ public final class SpellEffects {
 
                 // Apply the damage to the attacker
                 if (attacker.damage((ServerWorld) player.getWorld(), player.getDamageSources().magic(), retributionDamage)) {
+
+                    // HEAL THE PLAYER - Give back the health they lost
+                    //player.heal(damageAmount);
+
+
                     // Spawn thorns-like particles
                     if (player.getWorld() instanceof ServerWorld serverWorld) {
                         spawnRetributionParticles(serverWorld, attacker, data.level);
@@ -361,7 +366,7 @@ public final class SpellEffects {
 
                     // Play thorns sound
                     player.getWorld().playSound(null, attacker.getBlockPos(),
-                            SoundEvents.ENCHANT_THORNS_HIT,
+                            SoundEvents.ENTITY_PLAYER_ATTACK_CRIT,
                             SoundCategory.PLAYERS,
                             1.0f, 0.8f + (data.level * 0.1f));
 
