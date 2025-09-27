@@ -284,7 +284,7 @@ public final class SpellEffects {
         );
     }
 
-    // Weapon Enchantments (1/8) implemented:
+
 
     // RETRIBUTION Effect - Punishes the next attacker with multiplied damage
     public static final SpellEffect RETRIBUTION = (world, user, hand, stack, hit) -> {
@@ -1970,8 +1970,293 @@ public final class SpellEffects {
         }
     }
 
+    // NECROTIC Effect - Applies withering decay that scales with level
+    public static final SpellEffect NECROTIC = (world, user, hand, stack, hit) -> {
+        if (world.isClient) return false;
 
-}
+        int level = getSpellLevel(stack);
+
+        // Scaling system for duration and effects
+        int witherDuration;
+        int witherAmplifier;
+        float armorReduction;
+
+        switch (level) {
+            case 1:
+                witherDuration = 5 * 20; // 5 seconds
+                witherAmplifier = 0;     // Wither I
+                armorReduction = 0.20f;  // 20% reduction
+                break;
+            case 2:
+                witherDuration = 7 * 20; // 7 seconds
+                witherAmplifier = 1;     // Wither II
+                armorReduction = 0.40f;  // 40% reduction
+                break;
+            case 3:
+                witherDuration = 10 * 20; // 10 seconds
+                witherAmplifier = 1;      // Wither II
+                armorReduction = 0.60f;   // 60% reduction
+                break;
+            case 4:
+                witherDuration = 12 * 20; // 12 seconds
+                witherAmplifier = 2;      // Wither III
+                armorReduction = 0.80f;   // 80% reduction
+                break;
+            default:
+                // Continue scaling beyond level 4
+                witherDuration = (12 + (level - 4) * 2) * 20;
+                witherAmplifier = Math.min(2 + (level - 4), 5); // Cap at Wither VI
+                armorReduction = Math.min(0.80f + (level - 4) * 0.10f, 0.95f); // Cap at 95%
+        }
+
+        if (world instanceof ServerWorld serverWorld) {
+            // Find target (similar to sword slash targeting)
+            Vec3d lookVec = user.getRotationVec(1.0f);
+            Vec3d start = user.getEyePos();
+            double range = 20.0;
+            Vec3d end = start.add(lookVec.multiply(range));
+
+            Box hitBox = new Box(start, end).expand(1.0);
+            List<Entity> targets = world.getOtherEntities(user, hitBox);
+
+            // Find the closest valid target in front of the player
+            LivingEntity closest = null;
+            double closestDist = Double.MAX_VALUE;
+
+            for (Entity target : targets) {
+                if (target instanceof LivingEntity living && target != user) {
+                    Vec3d toTarget = living.getPos().subtract(start).normalize();
+                    if (lookVec.dotProduct(toTarget) > 0.3) {
+                        double dist = living.squaredDistanceTo(start);
+                        if (dist < closestDist) {
+                            closest = living;
+                            closestDist = dist;
+                        }
+                    }
+                }
+            }
+
+            if (closest != null) {
+                // Apply wither effect
+                closest.addStatusEffect(new StatusEffectInstance(
+                        StatusEffects.WITHER,
+                        witherDuration,
+                        witherAmplifier,
+                        false, true, true
+                ));
+
+                // Apply armor reduction effect (using custom logic)
+                applyArmorReduction(closest, armorReduction, witherDuration);
+
+                // Level 3+ effects
+                if (level >= 3) {
+                    // Nullify active regeneration/absorption
+                    closest.removeStatusEffect(StatusEffects.REGENERATION);
+                    closest.removeStatusEffect(StatusEffects.ABSORPTION);
+
+                    // Apply hunger to prevent natural healing
+                    closest.addStatusEffect(new StatusEffectInstance(
+                            StatusEffects.HUNGER,
+                            witherDuration,
+                            1, // Hunger II
+                            false, true, true
+                    ));
+                }
+
+                // Level 4+ effects
+                if (level >= 4) {
+                    // Apply weakness to further reduce damage
+                    closest.addStatusEffect(new StatusEffectInstance(
+                            StatusEffects.WEAKNESS,
+                            witherDuration,
+                            Math.min(level - 3, 3), // Scales with level
+                            false, true, true
+                    ));
+
+                    // Apply slowness to complete the decay theme
+                    closest.addStatusEffect(new StatusEffectInstance(
+                            StatusEffects.SLOWNESS,
+                            witherDuration,
+                            Math.min(level - 3, 2),
+                            false, true, true
+                    ));
+                }
+
+                // Track the entity for death effects if needed
+                if (level >= 3) {
+                    NecroticDeathTracker.trackEntity(closest, level);
+                }
+
+                // Spawn necrotic particles
+                spawnNecroticParticles(serverWorld, closest, level);
+
+                // Play necrotic sound
+                world.playSound(null, closest.getBlockPos(),
+                        SoundEvents.ENTITY_WITHER_SHOOT,
+                        SoundCategory.HOSTILE,
+                        0.8f, 0.7f + (level * 0.1f));
+
+                world.playSound(null, closest.getBlockPos(),
+                        SoundEvents.ENTITY_SKELETON_HURT,
+                        SoundCategory.HOSTILE,
+                        0.6f, 0.5f);
+
+                return true;
+            }
+        }
+
+        return false;
+    };
+
+    // Helper method to apply armor reduction (simulated effect)
+    private static void applyArmorReduction(LivingEntity entity, float reduction, int duration) {
+        // Since Minecraft doesn't have a direct armor reduction effect,
+        // we'll simulate it by applying weakness which reduces attack damage
+        // and making the entity take more damage temporarily
+
+        // Apply weakness to simulate reduced defense
+        int weaknessLevel = (int)(reduction * 4); // Convert 20% reduction to Weakness I, etc.
+        if (weaknessLevel > 0) {
+            entity.addStatusEffect(new StatusEffectInstance(
+                    StatusEffects.WEAKNESS,
+                    duration,
+                    Math.min(weaknessLevel - 1, 3), // Cap at Weakness IV
+                    false, true, true
+            ));
+        }
+    }
+
+    // Helper method to spawn necrotic particles
+    private static void spawnNecroticParticles(ServerWorld world, LivingEntity target, int level) {
+        int particleCount = 15 + (level * 5);
+
+        for (int i = 0; i < particleCount; i++) {
+            world.spawnParticles(
+                    ParticleTypes.SMOKE,
+                    target.getX() + (world.random.nextDouble() - 0.5) * target.getWidth(),
+                    target.getY() + world.random.nextDouble() * target.getHeight(),
+                    target.getZ() + (world.random.nextDouble() - 0.5) * target.getWidth(),
+                    2, // count
+                    0.1, 0.1, 0.1, // spread
+                    0.03 // speed
+            );
+
+            world.spawnParticles(
+                    ParticleTypes.ASH,
+                    target.getX() + (world.random.nextDouble() - 0.5) * target.getWidth(),
+                    target.getY() + world.random.nextDouble() * target.getHeight(),
+                    target.getZ() + (world.random.nextDouble() - 0.5) * target.getWidth(),
+                    1, // count
+                    0.08, 0.08, 0.08, // spread
+                    0.02 // speed
+            );
+
+            // Wither skull particles for higher levels
+            if (level >= 2) {
+                world.spawnParticles(
+                        ParticleTypes.SOUL_FIRE_FLAME,
+                        target.getX() + (world.random.nextDouble() - 0.5) * target.getWidth(),
+                        target.getY() + world.random.nextDouble() * target.getHeight(),
+                        target.getZ() + (world.random.nextDouble() - 0.5) * target.getWidth(),
+                        1, // count
+                        0.05, 0.05, 0.05, // spread
+                        0.01 // speed
+                );
+            }
+        }
+    }
+
+    // DEFENSE Effect - Grants temporary invulnerability with scaling duration
+    public static final SpellEffect DEFENSE = (world, user, hand, stack, hit) -> {
+        if (world.isClient) return false;
+
+        int level = getSpellLevel(stack);
+        int durationTicks = (3 * (int)Math.pow(2, level - 1)) * 20;
+
+        // Just use maximum resistance instead - it's simpler and won't break mob AI
+        user.addStatusEffect(new StatusEffectInstance(
+                StatusEffects.RESISTANCE,
+                durationTicks,
+                255, // Maximum possible resistance
+                false, false, false
+        ));
+
+        return true;
+    };
+
+    // HASTE Effect - Grants haste with scaling level and duration
+    public static final SpellEffect HASTE = (world, user, hand, stack, hit) -> {
+        if (world.isClient) return false;
+
+        int level = getSpellLevel(stack);
+
+        // Scaling duration: Level 1: 10s, Level 2: 20s, Level 3: 40s, etc.
+        int durationSeconds = 10 * (int)Math.pow(2, level - 1);
+        int durationTicks = durationSeconds * 20;
+
+        // Haste level scales with spell level (cap at Haste V)
+        int hasteLevel = Math.min(level - 1, 4); // Level 1 = Haste I, Level 2 = Haste II, etc.
+
+        if (world instanceof ServerWorld serverWorld) {
+            // Apply haste effect
+            user.addStatusEffect(new StatusEffectInstance(
+                    StatusEffects.HASTE,
+                    durationTicks,
+                    hasteLevel,
+                    false, false, true
+            ));
+
+            // Spawn enchantment particles around the player
+            spawnHasteParticles(serverWorld, user, level);
+
+            // Play a subtle magic sound
+            world.playSound(null, user.getBlockPos(),
+                    SoundEvents.BLOCK_ENCHANTMENT_TABLE_USE,
+                    SoundCategory.PLAYERS,
+                    0.7f, 1.0f + (level * 0.1f));
+
+            return true;
+        }
+
+        return false;
+    };
+
+    // Helper method to spawn haste particles
+    private static void spawnHasteParticles(ServerWorld world, PlayerEntity player, int level) {
+        int particleCount = 15 + (level * 5);
+        double radius = 1.0 + (level * 0.2);
+
+        for (int i = 0; i < particleCount; i++) {
+            double angle = (2 * Math.PI * i) / particleCount;
+            double dx = Math.cos(angle) * radius;
+            double dz = Math.sin(angle) * radius;
+
+            world.spawnParticles(
+                    ParticleTypes.ENCHANT,
+                    player.getX() + dx,
+                    player.getY() + 1.0,
+                    player.getZ() + dz,
+                    1, // count
+                    0.1, 0.1, 0.1, // spread
+                    0.02 // speed
+            );
+
+            // Add some electric spark particles for higher levels
+            if (level >= 3) {
+                world.spawnParticles(
+                        ParticleTypes.ELECTRIC_SPARK,
+                        player.getX() + dx * 0.7,
+                        player.getY() + 1.2,
+                        player.getZ() + dz * 0.7,
+                        1, // count
+                        0.05, 0.05, 0.05, // spread
+                        0.01 // speed
+                );
+            }
+        }
+    }
+
+} // Closing Line.
 
 
 

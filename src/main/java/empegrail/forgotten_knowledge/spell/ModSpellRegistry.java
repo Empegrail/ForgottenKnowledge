@@ -141,6 +141,30 @@ public final class ModSpellRegistry {
                 5
         ));
 
+        // This requires the books be level 2.
+        RECIPES.add(new SpellRecipe(
+                Enchantments.BREACH, 4,
+                Enchantments.BREACH, 4,
+                ModItems.NECROTIC_TOME,
+                5
+        ));
+
+        // This requires the books be level 2.
+        RECIPES.add(new SpellRecipe(
+                Enchantments.PROTECTION, 4,
+                Enchantments.PROTECTION, 4,
+                ModItems.DEFENSE_TOME,
+                5
+        ));
+
+        // This requires the books be level 2.
+        RECIPES.add(new SpellRecipe(
+                Enchantments.EFFICIENCY, 5,
+                Enchantments.EFFICIENCY, 5,
+                ModItems.HASTE_TOME,
+                5
+        ));
+
         // Add more recipes below in the same format.
     }
 
